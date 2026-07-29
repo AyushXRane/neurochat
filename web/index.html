@@ -22,6 +22,20 @@
 
   <!-- ── pane 1: control panel ────────────────────────────────────────── -->
   <section class="pane control" aria-label="Control panel">
+    <h2>
+      Library
+      <button id="lib-sample" class="inline-btn" title="Fetch a real multi-subject cohort (OASIS, downloads once)">Sample cohort</button>
+    </h2>
+    <div class="lib-controls">
+      <input id="lib-dir" type="text" placeholder="/folder/of/scans" spellcheck="false" />
+      <button id="lib-scan">Scan</button>
+    </div>
+    <p id="lib-status" class="hint">Point at a folder of NIfTI files. Headers only — nothing is loaded.</p>
+    <ul id="lib-list" class="lib-list" aria-label="Scans in the library"></ul>
+    <div id="lib-actions" class="lib-actions" hidden>
+      <button id="lib-table" disabled>Region across all scans</button>
+    </div>
+
     <h2>Volumes</h2>
     <ul id="layer-list" class="layer-list"></ul>
     <div id="space-prompts"></div>
@@ -68,8 +82,15 @@
   <!-- ── pane 4: action log + live script ─────────────────────────────── -->
   <section class="pane bottom" aria-label="Action log and script">
     <div class="bottom-half">
-      <h2>Action log</h2>
+      <h2>
+        <button id="tab-log" class="tab active" data-view="log">Action log</button>
+        <button id="tab-results" class="tab" data-view="results">Results</button>
+        <button id="results-csv" class="inline-btn" hidden title="Download this table as CSV">CSV</button>
+      </h2>
       <ol id="action-log" class="action-log"></ol>
+      <div id="results-view" hidden>
+        <p class="hint">Pick a region, then “Region across all scans”.</p>
+      </div>
     </div>
     <div class="bottom-half">
       <h2>

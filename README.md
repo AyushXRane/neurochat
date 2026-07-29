@@ -6,11 +6,11 @@
      `neurochat demo` → click a region → ask "mean uptake in the left hippocampus?" → Export .py → run it.
      The recording goes here, above all prose. -->
 
-![neurochat viewer: three orthogonal slices of a PET overlay on a structural volume, crosshair on a named atlas region](docs/viewer.png)
+![neurochat viewer: three orthogonal slices of a real OASIS subject's brain, crosshair on the left hippocampus](docs/viewer.png)
 
-*The image above is a real capture from the running app — the backend asked the browser's
-WebGL canvas for its pixels, downscaled them, and handed back a path. That round trip is
-also how the model sees its own output.*
+*A real capture from the running app, showing a real subject — one of the OASIS-1 scans
+the Library panel fetches. The crosshair is on the left hippocampus, resolved from the
+Harvard-Oxford atlas rather than from anyone's memory of where it is.*
 
 ---
 
@@ -120,6 +120,29 @@ and nilearn — not neurochat — and re-running it reproduces the numbers.
 That last property is tested, not asserted: a ten-turn session is exported, run in a
 fresh interpreter, and its JSON output is compared key by key against what the session
 reported. See `tests/test_acceptance.py::TestAcceptance3Reproducibility`.
+
+## Working with a cohort
+
+The engine always handled many volumes; the interface used to assume you were looking at
+one. The **Library** panel fixes that:
+
+- **Point it at a folder.** It finds every NIfTI underneath and reads *headers only* — no
+  voxel data — so a directory of hundreds of scans costs nothing and loads nothing. Each
+  entry shows its grid and its detected space, so you can see which scans will refuse
+  region names before you commit to any of them.
+- **Click a scan to inspect it.** It loads and becomes the only thing on screen, rather
+  than the twentieth layer on a stack.
+- **Tabulate one region across every scan.** Pick a region, hit the button, and get a
+  table of per-scan statistics — clickable rows jump to that subject. It emits a single
+  loop into the session script, not one copy per scan, and it reproduces on re-run.
+
+None of it involves the model. The LLM counter stays at zero throughout.
+
+**Sample cohort** fetches 12 real subjects from OASIS-1 (structural MRI grey-matter
+density maps, already normalised) so the library has real data to browse. Note what
+happens: all of them carry `sform_code=2`, so the whole cohort lands on the
+space-assertion path — which is what a large amount of real normalised data actually
+looks like, and why that assertion is one click rather than a wall.
 
 ## Why the coordinates are trustworthy
 

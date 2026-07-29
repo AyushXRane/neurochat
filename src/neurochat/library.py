@@ -80,30 +80,13 @@ def _entry_name(path: Path, seen: set[str]) -> str:
     return candidate
 
 
-def scan_directory(directory: str | Path, recursive: bool = True) -> dict:
-    """Find NIfTI files under ``directory``, reading headers only.
+def _entries_from_paths(paths: list[Path]) -> tuple[list[LibraryEntry], list[str]]:
+    """Read headers for a list of files. Returns (entries, unreadable descriptions).
 
-    Files that cannot be opened are counted and named rather than silently dropped —
-    a scan that quietly finds 39 of your 40 files is worse than one that finds 39 and
+    A file that will not open is counted and named rather than silently dropped — a
+    scan that quietly finds 39 of your 40 files is worse than one that finds 39 and
     tells you which one it choked on.
     """
-    root = Path(directory).expanduser()
-    if not root.exists():
-        raise FileNotFoundError(f"No such directory: {root}")
-    if not root.is_dir():
-        raise NotADirectoryError(f"Not a directory: {root}")
-
-    paths: list[Path] = []
-    walker = root.rglob("*") if recursive else root.glob("*")
-    for candidate in walker:
-        if candidate.is_file() and candidate.name.endswith(NIFTI_SUFFIXES):
-            paths.append(candidate)
-    paths.sort(key=lambda p: str(p).lower())
-
-    truncated = len(paths) > MAX_ENTRIES
-    if truncated:
-        paths = paths[:MAX_ENTRIES]
-
     import nibabel as nib
 
     entries: list[LibraryEntry] = []
@@ -128,6 +111,75 @@ def scan_directory(directory: str | Path, recursive: bool = True) -> dict:
             )
         except Exception as exc:  # noqa: BLE001 - a bad file is data, not a crash
             unreadable.append(f"{path.name} ({type(exc).__name__})")
+    return entries, unreadable
+
+
+def sample_cohort(n_subjects: int = 12) -> dict:
+    """A real multi-subject cohort, so the library has something honest to browse.
+
+    OASIS-1 grey-matter density maps: real structural MRI from real people, already
+    normalised, fetched through nilearn and cached. Structural only — there is no
+    freely-fetchable PET cohort, which is a documented gap rather than an oversight.
+
+    Worth knowing: these carry ``sform_code=2``, so every one of them lands on the
+    "space is aligned to something unspecified" path. That is not a flaw in the data,
+    it is what a large amount of real normalised data looks like, and it is exactly
+    why the space assertion is one click rather than a wall.
+    """
+    from nilearn import datasets
+
+    bunch = datasets.fetch_oasis_vbm(n_subjects=max(1, min(int(n_subjects), 100)))
+    paths = [Path(p) for p in bunch["gray_matter_maps"]]
+    entries, unreadable = _entries_from_paths(paths)
+
+    notes = [
+        f"OASIS-1: {len(entries)} real subjects, grey-matter density maps from structural "
+        "MRI. Values are tissue density in arbitrary units, not a quantitative measure.",
+        "Structural MRI only — no PET. There is no freely-fetchable PET cohort; see "
+        "LIMITATIONS.md.",
+    ]
+    if unreadable:
+        notes.append(f"{len(unreadable)} file(s) could not be read: {', '.join(unreadable[:3])}")
+    blocked = [e for e in entries if not e.space_resolvable and e.suggested_space]
+    if blocked:
+        notes.append(
+            f"All {len(blocked)} carry sform_code=2, so region names are off until you assert "
+            f"the space — one click, recorded as your assertion."
+        )
+    return {
+        "root": str(paths[0].parent.parent) if paths else "",
+        "recursive": False,
+        "n_found": len(entries),
+        "entries": [e.to_dict() for e in entries],
+        "notes": notes,
+    }
+
+
+def scan_directory(directory: str | Path, recursive: bool = True) -> dict:
+    """Find NIfTI files under ``directory``, reading headers only.
+
+    Files that cannot be opened are counted and named rather than silently dropped —
+    a scan that quietly finds 39 of your 40 files is worse than one that finds 39 and
+    tells you which one it choked on.
+    """
+    root = Path(directory).expanduser()
+    if not root.exists():
+        raise FileNotFoundError(f"No such directory: {root}")
+    if not root.is_dir():
+        raise NotADirectoryError(f"Not a directory: {root}")
+
+    paths: list[Path] = []
+    walker = root.rglob("*") if recursive else root.glob("*")
+    for candidate in walker:
+        if candidate.is_file() and candidate.name.endswith(NIFTI_SUFFIXES):
+            paths.append(candidate)
+    paths.sort(key=lambda p: str(p).lower())
+
+    truncated = len(paths) > MAX_ENTRIES
+    if truncated:
+        paths = paths[:MAX_ENTRIES]
+
+    entries, unreadable = _entries_from_paths(paths)
 
     notes: list[str] = []
     if truncated:
@@ -248,10 +300,26 @@ def region_across_library(
             skipped.append({"path": str(path), "reason": f"{type(exc).__name__}: {exc}"})
 
     if not rows:
-        raise SpaceUnknownError(
+        # Same principle as a single volume: a refusal must carry its own fix. A whole
+        # cohort written with sform_code=2 is the common case, not the exotic one.
+        suggestions = {s.get("suggested_space") for s in skipped if s.get("suggested_space")}
+        message = (
             f"No scan in the library could be measured for {region.label!r}. "
-            + (skipped[0]["reason"] if skipped else "The library is empty."),
-            skipped=skipped[:5],
+            + (skipped[0]["reason"] if skipped else "The library is empty.")
+        )
+        if len(suggestions) == 1:
+            only = suggestions.pop()
+            message += (
+                f" All of them sit on geometry that looks like {only}. If these really are "
+                f"normalised, re-run with assume_space='{only}' — recorded as your assertion."
+            )
+        elif suggestions:
+            message += (
+                f" They suggest more than one space ({', '.join(sorted(suggestions))}), so no "
+                "single assertion covers the cohort — they may not belong together."
+            )
+        raise SpaceUnknownError(
+            message, skipped=skipped[:5], suggested_space=sorted(suggestions) or None
         )
 
     step_key = f"step_{len(session.script.steps) + 1}_region_table"

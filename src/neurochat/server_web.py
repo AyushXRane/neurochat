@@ -123,6 +123,24 @@ def create_app(session: Session | None = None) -> FastAPI:
         app.state.library = {"root": result["root"], "entries": result["entries"]}
         return result
 
+    @app.post("/api/library/sample_cohort")
+    async def library_sample_cohort(request: Request) -> dict:
+        """Fetch a real multi-subject cohort (OASIS-1) so the library has real data."""
+        body = await request.json() if await request.body() else {}
+        try:
+            result = await asyncio.to_thread(
+                library.sample_cohort, int(body.get("n_subjects", 12))
+            )
+        except Exception as exc:  # noqa: BLE001 - a failed download is a message, not a 500
+            return {
+                "ok": False,
+                "error": type(exc).__name__,
+                "message": f"Could not fetch the OASIS cohort ({exc}). It needs network access "
+                "the first time; afterwards it is cached.",
+            }
+        app.state.library = {"root": result["root"], "entries": result["entries"]}
+        return {"ok": True, **result}
+
     @app.post("/api/library/select")
     async def library_select(request: Request) -> dict:
         """Load one scan from the library and make it the only thing on screen.

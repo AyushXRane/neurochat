@@ -26,6 +26,9 @@ const state = {
   atlasId: null,
   atlasSpace: null,
   regions: [],
+  library: [],
+  activeScan: null,
+  lastRegion: null,
   loadedUrls: new Map(), // layer name -> url currently in Niivue
 };
 
@@ -245,13 +248,160 @@ async function refreshRegions(query = "") {
       `<span>${region.label}</span>` +
       `<span class="coords">${region.centroid.map((c) => c.toFixed(0)).join(" ")}</span>`;
     item.title = `${region.n_voxels} voxels · ${region.volume_mm3} mm³ · click to navigate (no model call)`;
-    // R5: navigate with zero LLM calls.
-    item.addEventListener("click", () => callTool("navigate", { region_label: region.label }));
+    // R5: navigate with zero LLM calls. Also arms the cohort table with this region.
+    item.addEventListener("click", () => {
+      state.lastRegion = region.label;
+      updateRegionTableButton();
+      callTool("navigate", { region_label: region.label });
+    });
     list.appendChild(item);
   }
   if (!state.regions.length) {
     list.innerHTML = `<li class="hint">${state.atlasId ? "No match." : "Load an atlas first."}</li>`;
   }
+}
+
+// ── library: many scans on disk, one at a time on screen ──────────────────
+
+async function post(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({ detail: response.statusText }));
+    return { ok: false, message: detail.detail || response.statusText };
+  }
+  return response.json();
+}
+
+function renderLibrary() {
+  const list = $("lib-list");
+  list.innerHTML = "";
+  for (const entry of state.library) {
+    const item = document.createElement("li");
+    if (entry.path === state.activeScan) item.classList.add("active");
+    if (!entry.space_resolvable) item.classList.add("blocked");
+    const size = `${entry.shape.join("×")} @ ${entry.voxel_size_mm[0]}mm`;
+    item.innerHTML =
+      `<span class="lib-name">${entry.name}</span>` +
+      `<span class="lib-meta">${size} · ${entry.space}</span>`;
+    item.title = `${entry.path}\nspace: ${entry.space} (${entry.space_source})` +
+      (entry.space_resolvable ? "" : "\nRegion names are off until the space is asserted.");
+    // Clicking a scan loads it and hides the others. No model call.
+    item.addEventListener("click", () => selectScan(entry));
+    list.appendChild(item);
+  }
+  $("lib-actions").hidden = state.library.length === 0;
+  updateRegionTableButton();
+}
+
+async function selectScan(entry) {
+  $("lib-status").textContent = `Loading ${entry.name}…`;
+  const result = await post("/api/library/select", {
+    path: entry.path,
+    // If the header can't establish a space, carry the same assertion the volume
+    // prompt would ask for — the user chose this scan knowing what the list said.
+    space: entry.space_resolvable ? undefined : entry.suggested_space || undefined,
+    solo: true,
+  });
+  if (!result.ok) {
+    $("lib-status").textContent = result.message || "Could not load that scan.";
+    return;
+  }
+  state.activeScan = entry.path;
+  $("lib-status").textContent = `Showing ${entry.name}`;
+  logAction("library.select", result, { noLLM: true });
+  await refreshScript();
+  await refreshState();
+  renderLibrary();
+}
+
+function updateRegionTableButton() {
+  const button = $("lib-table");
+  const region = state.lastRegion;
+  button.disabled = !region || state.library.length === 0;
+  button.textContent = region
+    ? `${region} across ${state.library.length} scans`
+    : "Region across all scans";
+  button.title = region
+    ? "Measures this region in every scan in the library. No model call."
+    : "Click a region in the atlas list first.";
+}
+
+async function runRegionTable() {
+  const button = $("lib-table");
+  button.disabled = true;
+  button.textContent = "Measuring…";
+  // If every unresolvable scan agrees on the same likely space, carry that assertion
+  // through — it is the same one-click decision the volume prompt asks for, made once
+  // for the cohort instead of once per scan.
+  const blocked = state.library.filter((e) => !e.space_resolvable);
+  const suggested = new Set(blocked.map((e) => e.suggested_space).filter(Boolean));
+  const assume =
+    blocked.length && suggested.size === 1 ? [...suggested][0] : undefined;
+
+  const result = await post("/api/library/region_table", {
+    region_label: state.lastRegion,
+    assume_space: assume,
+  });
+  updateRegionTableButton();
+  if (!result.ok) {
+    switchBottomView("results");
+    $("results-view").innerHTML = `<p class="hint">${result.message || "Failed."}</p>`;
+    return;
+  }
+  logAction("library.region_table", result, { noLLM: true });
+  renderResultTable(result);
+  switchBottomView("results");
+  await refreshScript();
+}
+
+function renderResultTable(result) {
+  const host = $("results-view");
+  const columns = result.columns;
+  const head = columns.map((c) => `<th>${c}</th>`).join("");
+  const body = result.rows
+    .map(
+      (row) =>
+        `<tr data-path="${row.path}">` +
+        columns.map((c) => `<td>${row[c] === null ? "—" : row[c]}</td>`).join("") +
+        `</tr>`
+    )
+    .join("");
+
+  host.innerHTML =
+    `<p class="hint"><strong>${result.region}</strong> · ${result.atlas_id} · ` +
+    `${result.n_measured} measured${result.n_skipped ? `, ${result.n_skipped} skipped` : ""}</p>` +
+    `<table class="result-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` +
+    (result.skipped.length
+      ? `<p class="hint skipped">Skipped: ` +
+        result.skipped.map((s) => `${s.path.split("/").pop()} — ${s.reason}`).join("; ") +
+        `</p>`
+      : "") +
+    result.notes.map((n) => `<p class="hint">${n}</p>`).join("");
+
+  // Clicking a row jumps to that scan. Deterministic, no model call.
+  host.querySelectorAll("tbody tr").forEach((row) => {
+    row.title = "Click to view this scan (no model call)";
+    row.addEventListener("click", () => {
+      const entry = state.library.find((e) => e.path === row.dataset.path);
+      if (entry) selectScan(entry);
+    });
+  });
+
+  const csv = $("results-csv");
+  csv.hidden = false;
+  csv.onclick = () => window.open(`/api/library/table.csv?table_id=${result.table_id}`, "_blank");
+}
+
+function switchBottomView(view) {
+  $("action-log").hidden = view !== "log";
+  $("results-view").hidden = view !== "results";
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.view === view);
+  });
 }
 
 // ── Niivue ────────────────────────────────────────────────────────────────
@@ -477,6 +627,38 @@ window.addEventListener("DOMContentLoaded", async () => {
   $("region-filter").addEventListener("input", (event) => {
     clearTimeout(filterTimer);
     filterTimer = setTimeout(() => refreshRegions(event.target.value), 150);
+  });
+
+  // -- library controls --
+  const applyLibrary = (result) => {
+    if (result.ok === false) {
+      $("lib-status").textContent = result.message || "Scan failed.";
+      return;
+    }
+    state.library = result.entries || [];
+    state.activeScan = null;
+    $("lib-dir").value = result.root || $("lib-dir").value;
+    $("lib-status").textContent =
+      `${result.n_found} scan(s). ` + (result.notes || []).join(" ");
+    renderLibrary();
+  };
+
+  $("lib-scan").addEventListener("click", async () => {
+    $("lib-status").textContent = "Scanning…";
+    applyLibrary(await post("/api/library/scan", { directory: $("lib-dir").value.trim() }));
+  });
+  $("lib-dir").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") $("lib-scan").click();
+  });
+
+  $("lib-sample").addEventListener("click", async () => {
+    $("lib-status").textContent = "Fetching OASIS cohort (first run downloads, then cached)…";
+    applyLibrary(await post("/api/library/sample_cohort", { n_subjects: 12 }));
+  });
+
+  $("lib-table").addEventListener("click", runRegionTable);
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => switchBottomView(tab.dataset.view));
   });
 
   $("volume-load").addEventListener("click", async () => {

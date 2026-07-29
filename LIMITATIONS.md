@@ -35,6 +35,23 @@ The tool surface is fixed at ten tools. The model cannot run generated Python. W
 ask for something out of scope, the suggested code is written into your session script
 **as a comment** and never executed.
 
+## There is no real PET data anywhere in this project
+
+The bundled `sample_data/` phantoms are synthetic. One is *shaped like* a structural scan
+(concentric intensity shells imitating tissue contrast) and one is *shaped like* a PET
+uptake map (a smooth gradient with hotspots and a slab of NaN dropout). No MRI or PET
+physics was simulated. They exist to exercise code paths offline and should never be
+described as MRI or PET data.
+
+The real data the project can reach is structural MRI only: nilearn's ICBM152 template for
+the demo, and OASIS-1 grey-matter maps for the sample cohort.
+
+**There is no freely-fetchable PET cohort.** nilearn ships no PET dataset at all. Real PET
+means OpenNeuro (open, but gigabyte-scale and needs a custom downloader) or ADNI (requires
+an application and a data use agreement, so it can never ship with the repo). This matters
+because PET regional quantification is the workflow neurochat is most obviously useful
+for, and it is the workflow that has no realistic demo data here.
+
 ## It checks coordinate compatibility, not provenance
 
 `overlay` and `compare_volumes` warn when two volumes claim different spaces or sit on

@@ -154,6 +154,76 @@ button:hover { border-color: var(--accent); color: #fff; }
 button:disabled { opacity: 0.45; cursor: default; }
 .inline-btn { padding: 2px 8px; font-size: 11px; margin-left: auto; }
 
+/* ── library ─────────────────────────────────────────────────────────── */
+
+.lib-controls { display: flex; gap: 5px; }
+.lib-controls input { font-family: var(--mono); font-size: 11.5px; }
+.lib-controls button { flex: none; }
+
+.lib-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 190px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.lib-list:empty { display: none; }
+.lib-list li {
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 11.5px;
+  border-bottom: 1px solid rgba(42, 50, 61, 0.5);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.lib-list li:last-child { border-bottom: none; }
+.lib-list li:hover { background: var(--panel-2); }
+.lib-list li.active { background: var(--panel-2); border-left: 2px solid var(--accent); padding-left: 6px; }
+.lib-list .lib-name { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-list .lib-meta { color: var(--muted); font-size: 10px; white-space: nowrap; }
+.lib-list li.blocked .lib-meta { color: var(--warn); }
+
+.lib-actions { margin-top: 6px; }
+.lib-actions button { width: 100%; }
+
+/* ── bottom-pane tabs and the cohort table ───────────────────────────── */
+
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 2px 2px 3px;
+  margin-right: 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.tab:hover { color: var(--text); border-color: var(--line); }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+.result-table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--mono); }
+.result-table th {
+  text-align: right;
+  color: var(--muted);
+  font-weight: normal;
+  padding: 3px 7px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+.result-table th:first-child, .result-table td:first-child { text-align: left; }
+.result-table td { text-align: right; padding: 2px 7px; border-bottom: 1px solid rgba(42, 50, 61, 0.4); }
+.result-table tbody tr { cursor: pointer; }
+.result-table tbody tr:hover { background: var(--panel-2); }
+.result-table .skipped { color: var(--warn); }
+
 /* Shown when a volume's space can't be established but geometry suggests one.
    Deliberately not styled as an error — it's a question, and the user answers it. */
 .space-prompt {
