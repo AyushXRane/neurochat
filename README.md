@@ -197,6 +197,9 @@ neurochat check                      # is atlas grounding working on this machin
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). Vendored Niivue is BSD-2-Clause. Atlases fetched at runtime
-keep their own terms; notably Harvard-Oxford is distributed with FSL under a
-non-commercial licence and is **not** redistributed with this package.
+MIT — see [LICENSE](LICENSE).
+
+Third-party components keep their own terms, listed in [NOTICE.md](NOTICE.md): vendored
+Niivue is BSD-2-Clause, and atlases fetched at runtime are **not** redistributed here.
+Harvard-Oxford in particular ships with FSL under a licence that restricts commercial
+use — check it before publishing work that used it.
