@@ -14,21 +14,68 @@ import sys
 from . import __version__
 
 
-def _demo_session():
+def _real_template_path():
+    """A real human brain image, with no download: the template nilearn ships.
+
+    It is the asymmetric ICBM152 2009a template — an average of real brains, and a
+    genuinely different MNI152 variant from the one the Harvard-Oxford atlas lives in.
+    We label it accurately and let the variant warning fire, because that few-millimetre
+    disagreement is real and is exactly the kind of thing this tool exists to surface.
+    """
+    from nilearn import datasets
+
+    from .atlas import cache_dir
+
+    path = cache_dir() / "mni152_icbm152_2009a_t1_1mm.nii.gz"
+    if not path.exists():
+        datasets.load_mni152_template().to_filename(str(path))
+    return path
+
+
+def _demo_session(offline: bool = False):
     from .atlas import bundled_atlas_path
     from .session import Session
     from . import tools
 
     session = Session(name="demo")
     sample = bundled_atlas_path("phantom_t1.nii.gz").parent
+
+    if not offline:
+        try:
+            template = _real_template_path()
+            # The header on this file says sform_code=2 ("aligned to something"), not 4,
+            # so detection would decline it. We assert the space here because we know
+            # what the file is — the same one-argument fix the UI offers to a user.
+            tools.load_volume(
+                session, path=str(template), name="mni152_t1", space="MNI152NLin2009aSym"
+            )
+            atlas = tools.load_atlas(session, atlas_name="harvard-oxford-sub")
+            if not atlas.get("ok"):
+                raise RuntimeError(atlas.get("message", "atlas load failed"))
+            tools.set_display(session, volume="mni152_t1", colormap="gray")
+            tools.navigate(session, region_label="Left Hippocampus")
+            print("Loaded a real brain: nilearn's ICBM152 2009a template (an average of")
+            print("152 real brains), with the Harvard-Oxford subcortical atlas — 21 real")
+            print("anatomical structures. The crosshair is on the left hippocampus.")
+            print()
+            print("Note the tool warns that the volume and the atlas are different MNI152")
+            print("variants. That disagreement is real, and it is the point.")
+            print()
+            print("For the offline synthetic phantoms instead: neurochat demo --offline")
+            return session
+        except Exception as exc:  # noqa: BLE001 - offline or fetch failure is not fatal
+            print(f"Could not set up the real-data demo ({type(exc).__name__}: {exc}).")
+            print("Falling back to the bundled synthetic phantoms.\n")
+
     tools.load_volume(session, path=str(sample / "phantom_t1.nii.gz"), name="t1")
     tools.load_volume(session, path=str(sample / "phantom_pet_baseline.nii.gz"), name="pet")
     tools.load_atlas(session, atlas_name="demo-16")
     tools.set_display(session, volume="pet", colormap="hot", min=0.6, max=2.2, opacity=0.7)
     tools.overlay(session, volume="pet", on_top_of="t1", opacity=0.7)
-    print("Loaded the bundled synthetic phantoms and the demo-16 atlas.")
-    print("Those regions are geometric shapes, not anatomy — load 'harvard-oxford-sub'")
-    print("from the atlas menu for real structures (one-time ~26MB download via nilearn).")
+    tools.navigate(session, region_label="Left Deep Sphere")
+    print("Loaded the bundled synthetic phantoms and the demo-16 atlas — no network needed.")
+    print("Those regions are geometric shapes, NOT anatomy. For real structures on a real")
+    print("brain, run `neurochat demo` without --offline (one-time ~26MB atlas download).")
     return session
 
 
@@ -71,12 +118,18 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command")
 
     for name, help_text in (
-        ("demo", "load the bundled sample data and open the viewer"),
+        ("demo", "load a real brain plus a real atlas and open the viewer"),
         ("serve", "start the viewer with an empty session"),
     ):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("--host", default="127.0.0.1")
         p.add_argument("--port", type=int, default=8000)
+        if name == "demo":
+            p.add_argument(
+                "--offline",
+                action="store_true",
+                help="use the bundled synthetic phantoms instead; no network at all",
+            )
 
     p_mcp = sub.add_parser("mcp", help="run the MCP server (stdio by default)")
     p_mcp.add_argument("--transport", default="stdio", choices=["stdio", "streamable-http", "sse"])
@@ -103,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in ("demo", "serve"):
         from .server_web import main as web_main
 
-        session = _demo_session() if args.command == "demo" else None
+        session = _demo_session(offline=args.offline) if args.command == "demo" else None
         web_main(host=args.host, port=args.port, session=session)
         return 0
 

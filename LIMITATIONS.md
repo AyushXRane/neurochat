@@ -71,11 +71,19 @@ Space is detected from a BIDS sidecar, then a `space-` filename entity, then the
 - **False confidence:** a header claiming `sform_code=4` (MNI152) is taken at face value.
   Plenty of files carry that code without having been normalised. neurochat cannot verify
   the claim, and it will happily resolve region names on such a volume.
-- **False refusal:** a correctly-normalised volume whose header was stripped is refused,
-  even when its voxel grid exactly matches a known template. That refusal is deliberate —
-  geometry is reported as a hint and never promoted to a decision — but it means you may
-  have to pass `space=` yourself. When you do, the provenance records it as *your*
-  assertion, not an inference.
+- **False refusal:** a correctly-normalised volume can still be refused, and this is
+  common rather than exotic. `sform_code=2` ("aligned to some other image") is written by
+  a lot of tooling for data that really is in template space — including nilearn's own
+  copy of the MNI152 template. neurochat declines it, because "aligned to something" does
+  not say *which* something, and it could equally be another subject's scan.
+
+  The refusal is deliberate: geometry is reported as a hint and never promoted to a
+  decision. But it is not a dead end. When the geometry looks like a known template, the
+  error and the `load_volume` response both name the exact argument that resolves it, and
+  the web UI offers it as a single button. Accepting is recorded as `user_override` — your
+  assertion, not an inference — and **if you assert the wrong space, nothing downstream
+  will catch it.** That is the trade: the tool will not guess for you, which means when
+  you do decide, you own it.
 
 ## Known failure cases
 

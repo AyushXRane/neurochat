@@ -154,6 +154,22 @@ button:hover { border-color: var(--accent); color: #fff; }
 button:disabled { opacity: 0.45; cursor: default; }
 .inline-btn { padding: 2px 8px; font-size: 11px; margin-left: auto; }
 
+/* Shown when a volume's space can't be established but geometry suggests one.
+   Deliberately not styled as an error — it's a question, and the user answers it. */
+.space-prompt {
+  border: 1px solid var(--warn);
+  background: rgba(227, 179, 65, 0.08);
+  border-radius: 5px;
+  padding: 8px 9px;
+  margin: 6px 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.space-prompt strong { font-family: var(--mono); color: var(--warn); }
+.space-prompt .hint { margin: 0; display: block; }
+.space-prompt button { margin-top: 7px; border-color: var(--warn); color: var(--warn); }
+.space-prompt button:hover { background: rgba(227, 179, 65, 0.14); color: #fff; }
+
 .loader summary { cursor: pointer; color: var(--muted); font-size: 12px; margin: 8px 0 6px; }
 .loader input { margin-bottom: 6px; font-family: var(--mono); }
 

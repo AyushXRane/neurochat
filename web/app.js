@@ -127,6 +127,7 @@ async function refreshState() {
   if (!state.layers.length) list.innerHTML = '<p class="hint">No volume loaded.</p>';
   if (state.selected && !state.layers.some((l) => l.name === state.selected)) state.selected = null;
 
+  renderSpacePrompts(volumes);
   renderDisplayControls(volumes);
   await syncViewer();
 
@@ -137,6 +138,42 @@ async function refreshState() {
     await refreshRegions();
   }
   if (!data.chat_available) disableChat();
+}
+
+/* A volume whose space we could not establish is not an error — it is a question we
+ * cannot answer for the user. Ask it here, once, with the answer pre-filled from
+ * geometry. Accepting reloads the volume with `space=` set, so the provenance still
+ * records the space as the user's assertion and not as something we inferred. */
+function renderSpacePrompts(volumes) {
+  const host = $("space-prompts");
+  host.innerHTML = "";
+  for (const volume of Object.values(volumes)) {
+    const space = volume.space || {};
+    if (space.resolvable || !space.suggested_space) continue;
+
+    const box = document.createElement("div");
+    box.className = "space-prompt";
+    box.innerHTML =
+      `<strong>${volume.name}</strong> has no template space in its header, so region ` +
+      `names are turned off for it.<br />` +
+      `<span class="hint">${space.grid_hint ? "Geometry looks like " + space.grid_hint + "." : ""} ` +
+      `Only you can confirm it was normalised.</span>`;
+
+    const accept = document.createElement("button");
+    accept.textContent = `Treat as ${space.suggested_space}`;
+    accept.title = "Recorded as your assertion, not an inference";
+    accept.addEventListener("click", async () => {
+      accept.disabled = true;
+      const result = await callTool("load_volume", {
+        path: volume.path,
+        name: volume.name,
+        space: space.suggested_space,
+      });
+      if (!result.ok) addMessage("error", result.message);
+    });
+    box.appendChild(accept);
+    host.appendChild(box);
+  }
 }
 
 function renderDisplayControls(volumes) {

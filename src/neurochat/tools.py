@@ -166,13 +166,23 @@ def load_volume(session: Session, path: str, name: str | None = None, space: str
     payload = {
         **volume.to_dict(),
         "space_resolvable": volume.space.resolvable,
+        # Non-null only when we could not establish a space but geometry suggests one.
+        # The UI turns this into a one-click "treat as …", which reloads with space=
+        # set — so the assertion is still the human's, it just isn't a dead end.
+        "suggested_space": volume.space.suggested_space if not volume.space.resolvable else None,
         "notes": [],
     }
     if not volume.space.resolvable:
-        payload["notes"].append(
-            f"Region names cannot be resolved on this volume: {volume.space.detail} "
-            "Pass space= to assert one, or use explicit coordinates."
-        )
+        note = f"Region names cannot be resolved on this volume: {volume.space.detail}"
+        if volume.space.suggested_space:
+            note += (
+                f" The geometry looks like {volume.space.grid_hint or 'a template'}; if this "
+                f"volume really is normalised, reload it with "
+                f"space='{volume.space.suggested_space}' and region names will work."
+            )
+        else:
+            note += " Pass space= to assert one, or use explicit coordinates."
+        payload["notes"].append(note)
     if volume.summary["n_nan"]:
         payload["notes"].append(
             f"{volume.summary['n_nan']} NaN voxels present. roi_stats will report how many "

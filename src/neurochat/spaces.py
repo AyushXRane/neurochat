@@ -46,6 +46,7 @@ CANONICAL_SPACES = {
     "Talairach",
     "fsaverage",
     "native",
+    "aligned",
     "unknown",
 }
 
@@ -70,6 +71,7 @@ _SPACE_ALIASES = {
     "scanner": "native",
     "subject": "native",
     "t1w": "native",
+    "aligned": "aligned",
     "unknown": "unknown",
 }
 
@@ -93,16 +95,50 @@ _VARIANT_DISAGREEMENT_MM = {
     frozenset({"MNI152NLin2009aSym", "MNI152"}): 4.0,
 }
 
-#: Well-known template grids, used only to produce a hint string.
-#: (shape, rounded voxel size) -> description
+#: Well-known template grids. Each maps to a description and the space a caller would
+#: most likely assert if the volume really is that template. Neither is ever used to
+#: decide a space — see ``detect_space`` — only to make a refusal actionable.
+#: (shape, rounded voxel size) -> (description, likely space)
 _KNOWN_GRIDS = {
-    ((91, 109, 91), (2.0, 2.0, 2.0)): "FSL MNI152 2mm grid",
-    ((182, 218, 182), (1.0, 1.0, 1.0)): "FSL MNI152 1mm grid",
-    ((45, 54, 45), (4.0, 4.0, 4.0)): "FSL MNI152 4mm grid",
-    ((193, 229, 193), (1.0, 1.0, 1.0)): "MNI152NLin2009cAsym 1mm grid",
-    ((97, 115, 97), (2.0, 2.0, 2.0)): "MNI152NLin2009cAsym 2mm grid",
-    ((99, 117, 95), (2.0, 2.0, 2.0)): "MNI152 2mm grid (nilearn template)",
+    ((91, 109, 91), (2.0, 2.0, 2.0)): ("FSL MNI152 2mm grid", "MNI152NLin6Asym"),
+    ((182, 218, 182), (1.0, 1.0, 1.0)): ("FSL MNI152 1mm grid", "MNI152NLin6Asym"),
+    ((45, 54, 45), (4.0, 4.0, 4.0)): ("FSL MNI152 4mm grid", "MNI152NLin6Asym"),
+    ((193, 229, 193), (1.0, 1.0, 1.0)): ("MNI152NLin2009cAsym 1mm grid", "MNI152NLin2009cAsym"),
+    ((97, 115, 97), (2.0, 2.0, 2.0)): ("MNI152NLin2009cAsym 2mm grid", "MNI152NLin2009cAsym"),
+    # nilearn's bundled template is the asymmetric ICBM152 2009 release a.
+    ((99, 117, 95), (2.0, 2.0, 2.0)): ("2mm grid of nilearn's ICBM152 2009a template", "MNI152NLin2009aSym"),
+    ((197, 233, 189), (1.0, 1.0, 1.0)): ("1mm grid of nilearn's ICBM152 2009a template", "MNI152NLin2009aSym"),
 }
+
+#: Approximate world-space bounding box of an MNI152 brain, in millimetres.
+#: Used for a *shape-independent* plausibility check, because an exact grid table only
+#: recognises templates somebody thought to list. A volume whose field of view covers
+#: roughly this box is plausibly normalised — which is a hint, never a conclusion.
+_MNI_FOV_MM = ((-92.0, 92.0), (-130.0, 94.0), (-78.0, 112.0))
+_FOV_TOLERANCE_MM = 26.0
+
+
+def looks_like_mni_fov(affine: np.ndarray, shape) -> bool:
+    """Does this volume's field of view roughly cover an MNI152 brain?
+
+    Deliberately loose, and deliberately not authoritative. A scan can pass this and
+    be in scanner space; a legitimately normalised scan with a cropped field of view
+    can fail it. It exists so that a refusal can say "this looks normalised, and here
+    is the one argument that would let you proceed" instead of just "no".
+    """
+    affine = np.asarray(affine, dtype=float)
+    dims = np.array(shape[:3], dtype=float) - 1.0
+    corners = np.array(
+        [[i, j, k, 1.0] for i in (0, dims[0]) for j in (0, dims[1]) for k in (0, dims[2])]
+    )
+    world = (corners @ affine.T)[:, :3]
+    low, high = world.min(axis=0), world.max(axis=0)
+    for axis, (expected_low, expected_high) in enumerate(_MNI_FOV_MM):
+        if abs(low[axis] - expected_low) > _FOV_TOLERANCE_MM:
+            return False
+        if abs(high[axis] - expected_high) > _FOV_TOLERANCE_MM:
+            return False
+    return True
 
 
 def normalize_space_name(name: str | None) -> str | None:
@@ -132,6 +168,10 @@ class SpaceInfo:
     detail: str
     grid_hint: str | None = None
     xform_codes: dict = field(default_factory=dict)
+    #: The space a caller would most plausibly assert, when we cannot establish one
+    #: ourselves. Populated from geometry, which is why it is a *suggestion* the human
+    #: has to accept — accepting it is recorded as their assertion, not our inference.
+    suggested_space: str | None = None
 
     @property
     def is_mni(self) -> bool:
@@ -144,14 +184,24 @@ class SpaceInfo:
             "resolvable": self.resolvable,
             "detail": self.detail,
             "grid_hint": self.grid_hint,
+            "suggested_space": self.suggested_space,
             "xform_codes": self.xform_codes,
         }
 
 
-def _grid_hint(img) -> str | None:
+def _geometry_hints(img) -> tuple[str | None, str | None]:
+    """Return (human-readable hint, plausible space) from geometry alone."""
     shape = tuple(int(s) for s in img.shape[:3])
     zooms = tuple(round(float(z), 1) for z in img.header.get_zooms()[:3])
-    return _KNOWN_GRIDS.get((shape, zooms))
+    known = _KNOWN_GRIDS.get((shape, zooms))
+    if known:
+        return known
+    if looks_like_mni_fov(img.affine, shape):
+        return (
+            f"field of view covering an MNI152 brain ({zooms[0]}mm voxels)",
+            "MNI152",
+        )
+    return None, None
 
 
 def _sidecar_space(path: Path) -> tuple[str | None, str]:
@@ -195,7 +245,7 @@ def detect_space(img, path: str | Path | None = None, override: str | None = Non
     kind of claim from software inferring one.
     """
     path = Path(path) if path else None
-    hint = _grid_hint(img)
+    hint, suggested = _geometry_hints(img)
 
     header = img.header
     try:
@@ -219,6 +269,7 @@ def detect_space(img, path: str | Path | None = None, override: str | None = Non
             resolvable=canonical in RESOLVABLE_SPACES,
             detail=f"space asserted by the caller as {override!r}",
             grid_hint=hint,
+            suggested_space=suggested,
             xform_codes=codes,
         )
 
@@ -247,6 +298,7 @@ def detect_space(img, path: str | Path | None = None, override: str | None = Non
                 "so cross-variant differences of a few mm are possible."
             ),
             grid_hint=hint,
+            suggested_space=suggested,
             xform_codes=codes,
         )
     if code == 3:
@@ -259,18 +311,39 @@ def detect_space(img, path: str | Path | None = None, override: str | None = Non
                 "in MNI space, so region names are not resolved here."
             ),
             grid_hint=hint,
+            suggested_space=suggested,
             xform_codes=codes,
         )
-    if code in (1, 2):
+    if code == 2:
+        # aligned_anat means "registered to some other image" — which may well be a
+        # template, and often is. Plenty of correctly normalised data is written with
+        # this code, including nilearn's own copy of the MNI152 template. It is still
+        # not a claim about *which* space, so we decline and hand back the argument
+        # that would settle it rather than deciding for the caller.
+        return SpaceInfo(
+            name="aligned",
+            source="nifti_header",
+            resolvable=False,
+            detail=(
+                f"{which}=2 (aligned_anat): registered to some other image, but the header "
+                "does not say which. That could be a template or another subject's scan, so "
+                "atlas region names are not resolved on it automatically."
+            ),
+            grid_hint=hint,
+            suggested_space=suggested,
+            xform_codes=codes,
+        )
+    if code == 1:
         return SpaceInfo(
             name="native",
             source="nifti_header",
             resolvable=False,
             detail=(
-                f"{which}={code} ({XFORM_CODES[code]}). This volume is in subject/scanner "
-                "space, not a template space, so atlas region names do not apply."
+                f"{which}=1 (scanner_anat). This volume is in subject/scanner space, not a "
+                "template space, so atlas region names do not apply."
             ),
             grid_hint=hint,
+            suggested_space=suggested,
             xform_codes=codes,
         )
     if code == 5:
@@ -283,6 +356,7 @@ def detect_space(img, path: str | Path | None = None, override: str | None = Non
                 "Pass space= explicitly if you know which one."
             ),
             grid_hint=hint,
+            suggested_space=suggested,
             xform_codes=codes,
         )
 
@@ -295,24 +369,34 @@ def detect_space(img, path: str | Path | None = None, override: str | None = Non
             "and the filename carries no space- entity."
         ),
         grid_hint=hint,
+        suggested_space=suggested,
         xform_codes=codes,
     )
 
 
 def space_refusal_message(space: SpaceInfo, region_label: str, volume_name: str = "volume") -> str:
-    """The message we return instead of a coordinate we cannot justify."""
+    """The message we return instead of a coordinate we cannot justify.
+
+    Ordered so the fix comes first. A refusal that only explains itself is a wall; the
+    caller's next action should be visible in the first sentence they read.
+    """
     lines = [
         f"Cannot resolve {region_label!r}: {volume_name} has no recognized space in header. "
         f"Supply coords explicitly or specify space=.",
-        f"Detected: space={space.name} (source: {space.source}). {space.detail}",
     ]
+    if space.suggested_space:
+        lines.append(
+            f"To proceed, reload it as: load_volume(path, space='{space.suggested_space}'). "
+            f"That records the space as your assertion rather than our inference."
+        )
+    lines.append(f"Detected: space={space.name} (source: {space.source}). {space.detail}")
     if space.grid_hint:
         lines.append(
-            f"Note: the voxel grid matches the {space.grid_hint}, which is suggestive but not "
-            "proof. Geometry alone is not used to assign a space — pass "
-            "space='MNI152NLin6Asym' (or the correct variant) to assert it yourself."
+            f"The geometry matches a {space.grid_hint}, which is suggestive but not proof — "
+            "a scan can sit on a template's grid without having been normalised onto it, so "
+            "geometry is never used to assign a space on its own."
         )
-    lines.append(f"Known spaces: {', '.join(sorted(RESOLVABLE_SPACES))}.")
+    lines.append(f"Resolvable spaces: {', '.join(sorted(RESOLVABLE_SPACES))}.")
     return " ".join(lines)
 
 
