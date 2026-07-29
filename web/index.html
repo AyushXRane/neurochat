@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>neurochat</title>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <h1>neurochat</h1>
+  <p class="tagline">Ask questions of a brain volume in plain language; get back the figure
+    <strong>and</strong> the <code>nilearn</code> code that produced it.</p>
+  <div class="topbar-right">
+    <span id="space-badge" class="badge" title="Space of the current crosshair">space: —</span>
+    <span id="llm-counter" class="badge" title="Requests that went through a language model">LLM calls: 0</span>
+  </div>
+</header>
+
+<main class="panes">
+
+  <!-- ── pane 1: control panel ────────────────────────────────────────── -->
+  <section class="pane control" aria-label="Control panel">
+    <h2>Volumes</h2>
+    <ul id="layer-list" class="layer-list"></ul>
+
+    <details class="loader">
+      <summary>Load a volume</summary>
+      <input id="volume-path" type="text" placeholder="/path/to/scan.nii.gz" spellcheck="false" />
+      <button id="volume-load">Load</button>
+      <p class="hint">Already-preprocessed NIfTI only. No conversion, no registration.</p>
+    </details>
+
+    <h2>Display</h2>
+    <div id="display-controls" class="display-controls">
+      <p class="hint">Select a layer above.</p>
+    </div>
+
+    <h2>Atlas</h2>
+    <select id="atlas-select">
+      <option value="">— choose an atlas —</option>
+    </select>
+    <p id="atlas-note" class="hint"></p>
+
+    <input id="region-filter" type="search" placeholder="Filter regions…" aria-label="Filter regions" />
+    <ul id="region-list" class="region-list" aria-label="Atlas regions"></ul>
+    <p class="hint">Clicking a region navigates the viewer with <strong>zero</strong> model calls.</p>
+  </section>
+
+  <!-- ── pane 2: the viewer ───────────────────────────────────────────── -->
+  <section class="pane viewer" aria-label="Viewer">
+    <canvas id="nv-canvas"></canvas>
+    <div id="crosshair-readout" class="readout">no volume loaded</div>
+  </section>
+
+  <!-- ── pane 3: chat ─────────────────────────────────────────────────── -->
+  <section class="pane chat" aria-label="Chat">
+    <h2>Chat</h2>
+    <div id="chat-log" class="chat-log"></div>
+    <form id="chat-form" class="chat-form">
+      <textarea id="chat-input" rows="2" placeholder="e.g. what's the mean uptake in the left deep sphere?"></textarea>
+      <button type="submit" id="chat-send">Send</button>
+    </form>
+  </section>
+
+  <!-- ── pane 4: action log + live script ─────────────────────────────── -->
+  <section class="pane bottom" aria-label="Action log and script">
+    <div class="bottom-half">
+      <h2>Action log</h2>
+      <ol id="action-log" class="action-log"></ol>
+    </div>
+    <div class="bottom-half">
+      <h2>
+        Live <code>nilearn</code> script
+        <button id="export-btn" class="inline-btn" title="Write a standalone runnable .py">Export .py</button>
+      </h2>
+      <pre id="script-pane" class="script"># Your analysis will appear here as you go.</pre>
+    </div>
+  </section>
+
+</main>
+
+<script src="/static/vendor/niivue.umd.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

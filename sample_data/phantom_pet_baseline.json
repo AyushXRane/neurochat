@@ -1,0 +1,5 @@
+{
+  "Space": "MNI152NLin6Asym",
+  "Description": "Synthetic PET-like uptake phantom with deliberate NaN dropout. Not subject data.",
+  "Units": "arbitrary uptake"
+}

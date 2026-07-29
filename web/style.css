@@ -1,0 +1,250 @@
+/* Four panes, per NLI4VolVis: control panel, render window, chat widget, action log.
+   Deliberately not redesigned — that layout is the interaction-design precedent. */
+
+:root {
+  --bg: #0e1116;
+  --panel: #161b22;
+  --panel-2: #1c232c;
+  --line: #2a323d;
+  --text: #d8dee6;
+  --muted: #8b97a6;
+  --accent: #59a5f5;
+  --warn: #e3b341;
+  --error: #f47272;
+  --ok: #6fcf7f;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+body { display: flex; flex-direction: column; }
+
+/* ── top bar ─────────────────────────────────────────────────────────── */
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex: none;
+}
+.topbar h1 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+.tagline { margin: 0; color: var(--muted); font-size: 12.5px; flex: 1; }
+.tagline code { font-family: var(--mono); }
+.topbar-right { display: flex; gap: 8px; }
+.badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+/* ── the four panes ──────────────────────────────────────────────────── */
+
+.panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 300px 1fr 360px;
+  grid-template-rows: 1fr 260px;
+  grid-template-areas:
+    "control viewer chat"
+    "bottom  bottom bottom";
+  gap: 1px;
+  background: var(--line);
+}
+
+.pane { background: var(--panel); overflow: auto; padding: 12px; min-width: 0; min-height: 0; }
+.control { grid-area: control; }
+.viewer  { grid-area: viewer; padding: 0; position: relative; background: #000; overflow: hidden; }
+.chat    { grid-area: chat; display: flex; flex-direction: column; }
+.bottom  { grid-area: bottom; display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; padding: 0; }
+
+.pane h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 14px 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pane h2:first-child { margin-top: 0; }
+
+.hint { color: var(--muted); font-size: 11.5px; margin: 6px 0; }
+
+/* ── control panel ───────────────────────────────────────────────────── */
+
+.layer-list, .region-list { list-style: none; margin: 0; padding: 0; }
+
+.layer-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  margin-bottom: 4px;
+  background: var(--panel-2);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.layer-list li.selected { border-color: var(--accent); }
+.layer-list .layer-name { flex: 1; font-family: var(--mono); }
+.layer-list .layer-space { color: var(--muted); font-size: 10.5px; }
+
+.region-list {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  margin-top: 6px;
+}
+.region-list li {
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgba(42, 50, 61, 0.5);
+}
+.region-list li:last-child { border-bottom: none; }
+.region-list li:hover { background: var(--panel-2); }
+.region-list .coords { font-family: var(--mono); color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+
+input[type="text"], input[type="search"], select, textarea {
+  width: 100%;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  font-family: inherit;
+}
+input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
+button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-family: inherit;
+}
+button:hover { border-color: var(--accent); color: #fff; }
+button:disabled { opacity: 0.45; cursor: default; }
+.inline-btn { padding: 2px 8px; font-size: 11px; margin-left: auto; }
+
+.loader summary { cursor: pointer; color: var(--muted); font-size: 12px; margin: 8px 0 6px; }
+.loader input { margin-bottom: 6px; font-family: var(--mono); }
+
+.display-controls label {
+  display: grid;
+  grid-template-columns: 62px 1fr 46px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.display-controls input[type="range"] { width: 100%; }
+.display-controls .value { font-family: var(--mono); font-size: 10.5px; text-align: right; }
+.display-controls select { grid-column: 2 / span 2; }
+
+/* ── viewer ──────────────────────────────────────────────────────────── */
+
+#nv-canvas { width: 100%; height: 100%; display: block; }
+.readout {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text);
+  background: rgba(14, 17, 22, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 4px 9px;
+  pointer-events: none;
+}
+
+/* ── chat ────────────────────────────────────────────────────────────── */
+
+.chat-log { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
+
+.msg { border-radius: 6px; padding: 7px 10px; font-size: 12.5px; white-space: pre-wrap; word-wrap: break-word; }
+.msg.user { background: var(--panel-2); border: 1px solid var(--line); }
+.msg.assistant { background: transparent; border-left: 2px solid var(--accent); border-radius: 0; padding-left: 10px; }
+.msg.tool {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel-2);
+  border-left: 2px solid var(--line);
+  border-radius: 0;
+}
+.msg.tool.failed { border-left-color: var(--warn); color: var(--warn); }
+.msg.refusal { background: rgba(227, 179, 65, 0.09); border: 1px solid var(--warn); color: var(--warn); }
+.msg.error { background: rgba(244, 114, 114, 0.09); border: 1px solid var(--error); color: var(--error); }
+.msg .suggestions { margin-top: 5px; font-size: 11.5px; }
+.msg .suggestions button { padding: 1px 7px; font-size: 11px; margin: 2px 4px 0 0; }
+
+.chat-form { display: flex; gap: 6px; margin-top: 8px; flex: none; }
+.chat-form textarea { flex: 1; resize: none; }
+
+/* ── action log + script ─────────────────────────────────────────────── */
+
+.bottom-half { overflow: auto; padding: 12px; min-width: 0; }
+.bottom-half:last-child { border-left: 1px solid var(--line); }
+
+.action-log { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 11px; }
+.action-log li {
+  padding: 3px 6px;
+  border-left: 2px solid var(--line);
+  margin-bottom: 2px;
+  color: var(--muted);
+  cursor: default;
+}
+.action-log li.clickable { cursor: pointer; color: var(--text); }
+.action-log li.clickable:hover { background: var(--panel-2); border-left-color: var(--accent); }
+.action-log li.failed { border-left-color: var(--warn); color: var(--warn); }
+.action-log .tool-name { color: var(--accent); }
+.action-log .no-llm { color: var(--ok); }
+
+.script {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 0;
+  white-space: pre;
+  overflow: auto;
+  color: var(--text);
+}
+.script .comment { color: var(--muted); }
+
+@media (max-width: 1100px) {
+  .panes {
+    grid-template-columns: 260px 1fr;
+    grid-template-rows: 1fr 220px 240px;
+    grid-template-areas: "control viewer" "chat chat" "bottom bottom";
+  }
+}

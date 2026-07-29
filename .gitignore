@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# Session artifacts. These persist on purpose (exported scripts reference them),
+# but they are a user's working files, not part of the repo.
+.neurochat/
+neurochat_session.py

@@ -1,0 +1,43 @@
+{
+  "atlas_id": "demo-16",
+  "space": "MNI152NLin6Asym",
+  "labels": [
+    "Background",
+    "Left Anterior Superior Block",
+    "Right Anterior Superior Block",
+    "Left Anterior Inferior Block",
+    "Right Anterior Inferior Block",
+    "Left Posterior Superior Block",
+    "Right Posterior Superior Block",
+    "Left Posterior Inferior Block",
+    "Right Posterior Inferior Block",
+    "Left Lateral Band",
+    "Right Lateral Band",
+    "Left Deep Sphere",
+    "Right Deep Sphere",
+    "Left Ventral Shell",
+    "Right Ventral Shell",
+    "Midline Dorsal Cap",
+    "Midline Ventral Core"
+  ],
+  "indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "warning": "Synthetic geometric shapes. These are NOT anatomical structures. Use only for offline smoke tests and demos."
+}
