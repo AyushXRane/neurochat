@@ -35,6 +35,25 @@ The tool surface is fixed at ten tools. The model cannot run generated Python. W
 ask for something out of scope, the suggested code is written into your session script
 **as a comment** and never executed.
 
+## It checks coordinate compatibility, not provenance
+
+`overlay` and `compare_volumes` warn when two volumes claim different spaces or sit on
+different grids. Neither has any concept of **which brain a scan came from.**
+
+Nothing connects `sub-01_PET.nii.gz` to `sub-01_T1w.nii.gz` rather than to
+`sub-47_T1w.nii.gz`. If both are normalised to MNI they will align perfectly, the figure
+will look entirely convincing, and it will be meaningless. No warning is issued, because
+from the tool's point of view nothing is wrong: the coordinates are compatible.
+
+An overlay is only interpretable when the two volumes are either (a) from the same person
+and coregistered — an alignment step that must have happened during preprocessing, since
+neurochat does not perform it — or (b) both normalised into the same template space.
+Displaying a subject's PET on a *template* brain is a legitimate and standard figure, and
+is not covered by this warning; displaying one subject's data on another subject's
+anatomy is not, and neurochat cannot tell the difference.
+
+Subject identity is your responsibility. The tool will not catch a mismatched pair.
+
 ## It is modality-agnostic mechanically and modality-blind interpretively
 
 neurochat will load any 3D NIfTI — T1, T2, FLAIR, PET, SPECT, CT, a grey-matter density
