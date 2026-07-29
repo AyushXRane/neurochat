@@ -35,6 +35,34 @@ The tool surface is fixed at ten tools. The model cannot run generated Python. W
 ask for something out of scope, the suggested code is written into your session script
 **as a comment** and never executed.
 
+## It is modality-agnostic mechanically and modality-blind interpretively
+
+neurochat will load any 3D NIfTI — T1, T2, FLAIR, PET, SPECT, CT, a grey-matter density
+map, someone else's statistical map — and measure the right voxels in all of them. The
+mechanics genuinely do not depend on what the numbers represent.
+
+**The interpretation does, and neurochat does not help you with it.**
+
+- **No units, anywhere.** A returned `mean` is a bare number. An MRI intensity is in
+  arbitrary units, is not comparable between scanners, and is frequently not comparable
+  between two sessions on the same scanner. A PET SUV is genuinely quantitative. neurochat
+  reports both identically and cannot tell you which one you are holding.
+- **No reference-region normalisation.** Standard PET quantification divides by a
+  reference region (usually cerebellum) to produce an SUVR, because raw uptake is
+  confounded by injected dose, body weight and scan timing. `compare_volumes(method=
+  "ratio")` can approximate this if you supply the reference volume yourself, but nothing
+  prompts you to, and nothing checks that you did.
+- **No partial-volume correction, and no warning about it.** PET resolution is roughly
+  4–6mm against MRI's ~1mm, so a small structure measured in PET is substantially
+  contaminated by neighbouring tissue — a hippocampal value that is partly ventricle and
+  partly white matter. Correcting for this is a whole literature. neurochat does none of
+  it and does not currently flag when your voxels are large relative to the region you
+  asked about.
+
+The practical consequence: neurochat gives you a correct mean of the correct voxels, and
+says nothing about whether that mean means anything in your modality. Treat it as a
+measurement tool, not an interpretation one.
+
 ## Atlas resolution and accuracy
 
 This is where wrong numbers are most likely to come from, so read this section carefully.

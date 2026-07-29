@@ -25,9 +25,10 @@ from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, tools as tool_module
+from . import __version__, library, tools as tool_module
 from .agent import ChatAgent
 from .atlas import ATLAS_REGISTRY
+from .errors import NeurochatError
 from .session import Session
 
 
@@ -103,6 +104,92 @@ def create_app(session: Session | None = None) -> FastAPI:
     def tool_trace(n: int = Query(5, ge=1, le=50)) -> dict:
         """Recent full traces: arguments in, results out. Bounded, in memory."""
         return {"n": n, "traces": session.recent_traces(n)}
+
+    # -- library: many scans on disk, one at a time in the viewer ----------
+
+    app.state.library = {"root": None, "entries": []}
+
+    @app.post("/api/library/scan")
+    async def library_scan(request: Request) -> dict:
+        """Find NIfTI files under a directory. Reads headers only; loads nothing."""
+        body = await request.json()
+        directory = (body.get("directory") or "").strip() or library.default_library_root()
+        try:
+            result = await asyncio.to_thread(
+                library.scan_directory, directory, bool(body.get("recursive", True))
+            )
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        app.state.library = {"root": result["root"], "entries": result["entries"]}
+        return result
+
+    @app.post("/api/library/select")
+    async def library_select(request: Request) -> dict:
+        """Load one scan from the library and make it the only thing on screen.
+
+        Deliberately routed through load_volume/set_display rather than around them,
+        so selecting a scan is recorded in the script like any other action.
+        """
+        body = await request.json()
+        path = body.get("path")
+        if not path:
+            raise HTTPException(400, "path is required")
+
+        extra = {k: body[k] for k in ("name", "space") if body.get(k)}
+        result = await asyncio.to_thread(
+            tool_module.call, session, "load_volume", path=path, **extra
+        )
+        if not result.get("ok"):
+            return result
+
+        if body.get("solo", True):
+            selected = result["name"]
+            for layer in list(session.viewer.state.layers):
+                if layer.name != selected and layer.visible:
+                    await asyncio.to_thread(
+                        tool_module.call, session, "set_display", volume=layer.name, visible=False
+                    )
+            await asyncio.to_thread(
+                tool_module.call, session, "set_display", volume=selected, visible=True
+            )
+        result["state"] = session.state()
+        return result
+
+    @app.post("/api/library/region_table")
+    async def library_region_table(request: Request) -> dict:
+        """One atlas region measured across every scan in the library. No model call."""
+        body = await request.json()
+        region_label = body.get("region_label")
+        if not region_label:
+            raise HTTPException(400, "region_label is required")
+        paths = body.get("paths") or [e["path"] for e in app.state.library["entries"]]
+        if not paths:
+            raise HTTPException(400, "The library is empty — scan a folder first.")
+        try:
+            return await asyncio.to_thread(
+                library.region_across_library,
+                session,
+                paths,
+                region_label,
+                bool(body.get("exclude_zeros", False)),
+                body.get("assume_space"),
+            )
+        except NeurochatError as exc:
+            return {"ok": False, **exc.to_dict()}
+        except (ValueError, KeyError) as exc:
+            return {"ok": False, "error": type(exc).__name__, "message": str(exc)}
+
+    @app.get("/api/library/table.csv", response_class=PlainTextResponse)
+    def library_table_csv(table_id: str) -> PlainTextResponse:
+        """The cohort table as CSV — the next thing anyone does with it is paste it."""
+        table = session.tables.get(table_id)
+        if table is None:
+            raise HTTPException(404, "No such table in this session.")
+        body = library.rows_to_csv(table.rows, table.columns)
+        return PlainTextResponse(
+            body,
+            headers={"Content-Disposition": f'attachment; filename="{table.tool}-{table_id}.csv"'},
+        )
 
     # -- files -------------------------------------------------------------
 

@@ -43,14 +43,45 @@ none of that was ever supposed to need a language model.
 
 ## Use it from Claude Desktop or Claude Code
 
-The MCP server is the same ten tools over stdio. Add to `claude_desktop_config.json`:
+The MCP server is the same ten tools over stdio, so your scans stay on your machine —
+only small JSON summaries reach the model. It also composes: inside Claude Desktop you
+can read subject IDs from a spreadsheet, pull each scan's regional stats, and write the
+results into a document, because neurochat is one capability among many rather than a
+separate app you have to remember to open.
+
+Open your config:
+
+```bash
+open -e ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+
+(On Windows it lives at `%APPDATA%\Claude\claude_desktop_config.json`.) Add a `neurochat`
+entry under `mcpServers`, using the **absolute path** to the executable:
 
 ```json
 {
   "mcpServers": {
-    "neurochat": { "command": "neurochat", "args": ["mcp"] }
+    "neurochat": {
+      "command": "/absolute/path/to/.venv/bin/neurochat",
+      "args": ["mcp"]
+    }
   }
 }
+```
+
+Then **fully quit and reopen Claude Desktop** — closing the window is not enough; the
+config is only read at launch.
+
+> **The absolute path is not optional.** Claude Desktop does not inherit your shell's
+> `PATH`, so a bare `"command": "neurochat"` fails to start with an unhelpful error even
+> though the same command works fine in your terminal. Get the right path with
+> `which neurochat` inside your activated environment. This is the single most common
+> reason an MCP server silently fails to connect.
+
+For Claude Code, one command instead:
+
+```bash
+claude mcp add neurochat -- /absolute/path/to/.venv/bin/neurochat mcp
 ```
 
 Headless by default — `screenshot()` renders server-side with nilearn, so a conversation
@@ -168,6 +199,12 @@ is vendored into `web/vendor/` (BSD-2-Clause) so the app needs no CDN and no bui
 **The delta:** nothing equivalent exists for volumetric human neuroimaging — NIfTI volumes,
 MNI space, standard atlases, MRI and PET — and nothing in the list above emits reproducible
 `nilearn` code as a first-class output.
+
+## New to neuroimaging?
+
+[GLOSSARY.md](GLOSSARY.md) explains every term this project uses — voxel, volume, MNI,
+template, atlas, mask, resampling — building up from "what is a scan" rather than
+assuming the vocabulary. Written for someone with no background in the field.
 
 ## What it will not do
 
