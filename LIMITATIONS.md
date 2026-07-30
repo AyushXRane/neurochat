@@ -65,14 +65,20 @@ uptake map (a smooth gradient with hotspots and a slab of NaN dropout). No MRI o
 physics was simulated. They exist to exercise code paths offline and should never be
 described as MRI or PET data.
 
-The real data the project can reach is structural MRI only: nilearn's ICBM152 template for
-the demo, and OASIS-1 grey-matter maps for the sample cohort.
+The real data the project can reach is: nilearn's ICBM152 template for the demo, OASIS-1
+grey-matter maps for the MRI cohort, and ds004054 SUV maps for the PET cohort.
 
-**There is no freely-fetchable PET cohort.** nilearn ships no PET dataset at all. Real PET
-means OpenNeuro (open, but gigabyte-scale and needs a custom downloader) or ADNI (requires
-an application and a data use agreement, so it can never ship with the repo). This matters
-because PET regional quantification is the workflow neurochat is most obviously useful
-for, and it is the workflow that has no realistic demo data here.
+**What is still missing is a PET cohort with clinical variables.** OASIS-1 comes with age,
+sex, MMSE and dementia ratings, so it can demonstrate a real question. The PET cohort is
+healthy controls with little accompanying metadata, so it demonstrates that PET *works*
+rather than that it answers anything. Richer PET — amyloid or tau with diagnosis attached
+— means ADNI or OASIS-3, both of which require an application and a data use agreement and
+so can never ship with the repo.
+
+**And no cohort here has paired MRI and PET loaded together.** ds004054 does contain a T1
+per subject, but only the PET derivative is fetched; the T1s are in scanner space and
+would need preprocessing first. So the tissue-versus-signal comparison that paired data
+makes possible is not demonstrated anywhere in this project.
 
 ## It checks coordinate compatibility, not provenance
 
