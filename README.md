@@ -138,11 +138,22 @@ one. The **Library** panel fixes that:
 
 None of it involves the model. The LLM counter stays at zero throughout.
 
-**Sample cohort** fetches 12 real subjects from OASIS-1 (structural MRI grey-matter
-density maps, already normalised) so the library has real data to browse. Note what
-happens: all of them carry `sform_code=2`, so the whole cohort lands on the
-space-assertion path — which is what a large amount of real normalised data actually
-looks like, and why that assertion is one click rather than a wall.
+Two buttons load real cohorts:
+
+- **MRI cohort** — 12 subjects from OASIS-1 (structural grey-matter density maps).
+  All of them carry `sform_code=2`, so the whole cohort lands on the space-assertion
+  path, which is what a lot of real normalised data actually looks like.
+- **PET cohort** — 8 subjects from OpenNeuro `ds004054`, real [18F]FDG SUV maps. Only
+  the ~4MB derivative per subject is downloaded, not the 500MB dataset.
+
+The PET files need a header repair, and neurochat says so every time it hands them to
+you. They ship on the SPM MNI 1mm grid but declare scanner space with x/y origins
+offset by exactly one field of view — with the shipped affine, **0%** of every atlas
+region falls inside the brain; with the canonical affine, 44-60% does, the shortfall
+being PET's axial field of view clipping the inferior brain. The untouched downloads
+are kept alongside as `*_original.nii.gz`, and a test asserts the shipped affine really
+is broken, so if OpenNeuro fixes it upstream the repair gets removed rather than
+silently kept.
 
 ## Why the coordinates are trustworthy
 

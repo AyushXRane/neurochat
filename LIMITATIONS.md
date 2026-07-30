@@ -35,7 +35,29 @@ The tool surface is fixed at ten tools. The model cannot run generated Python. W
 ask for something out of scope, the suggested code is written into your session script
 **as a comment** and never executed.
 
-## There is no real PET data anywhere in this project
+## Real PET is available, but it needed a header repair
+
+The **PET cohort** button fetches real [18F]FDG SUV maps from OpenNeuro `ds004054`. This
+is the one place neurochat knowingly rewrites a file's header, so it is worth stating
+plainly what happens and why.
+
+Those files ship on the SPM MNI 1mm grid — shape exactly (181, 217, 181), and the z
+extent already exactly MNI's — but declare scanner space with the x and y origins offset
+by precisely one field of view. The evidence that this is a bug rather than an ambiguity
+is checkable: with the shipped affine **0%** of every atlas region lands inside the
+brain; with the canonical SPM MNI affine, 44-60% does. The shortfall is PET's limited
+axial field of view clipping the inferior brain, which also explains the large NaN
+exclusion counts you will see.
+
+So neurochat writes a repaired copy, keeps the untouched download alongside as
+`*_original.nii.gz`, and says it did on **every** call — including cached ones, which was
+a bug caught by a test. A second test asserts the shipped affine really is still broken,
+so if OpenNeuro corrects it upstream the repair fails loudly rather than lingering.
+
+The repair is keyed to that one identifiable grid and refuses to touch anything else.
+It is not a general-purpose affine fixer, and it should never become one.
+
+## The rest of the data here is synthetic or structural
 
 The bundled `sample_data/` phantoms are synthetic. One is *shaped like* a structural scan
 (concentric intensity shells imitating tissue contrast) and one is *shaped like* a PET

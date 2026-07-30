@@ -141,6 +141,25 @@ def create_app(session: Session | None = None) -> FastAPI:
         app.state.library = {"root": result["root"], "entries": result["entries"]}
         return {"ok": True, **result}
 
+    @app.post("/api/library/pet_cohort")
+    async def library_pet_cohort(request: Request) -> dict:
+        """Fetch a real PET cohort (OpenNeuro ds004054) — per-file, not the whole dataset."""
+        body = await request.json() if await request.body() else {}
+        try:
+            result = await asyncio.to_thread(
+                library.pet_cohort,
+                int(body.get("n_subjects", 8)),
+                bool(body.get("repair", True)),
+            )
+        except Exception as exc:  # noqa: BLE001 - a failed download is a message, not a 500
+            return {
+                "ok": False,
+                "error": type(exc).__name__,
+                "message": f"Could not fetch the PET cohort ({exc}).",
+            }
+        app.state.library = {"root": result["root"], "entries": result["entries"]}
+        return {"ok": True, **result}
+
     @app.post("/api/library/select")
     async def library_select(request: Request) -> dict:
         """Load one scan from the library and make it the only thing on screen.

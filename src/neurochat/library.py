@@ -155,6 +155,149 @@ def sample_cohort(n_subjects: int = 12) -> dict:
     }
 
 
+#: OpenNeuro ds004054 — "Aerobic Glycolysis Imaging PET-MRI", 42 subjects, both
+#: modalities each. We pull only the per-subject SUV derivative (~4MB), not the raw
+#: imaging, so a "cohort" costs megabytes instead of the dataset's half-gigabyte.
+PET_DATASET = "ds004054"
+PET_SNAPSHOT = "1.0.0"
+PET_FILE_URL = (
+    "https://openneuro.org/crn/datasets/{ds}/snapshots/{tag}/files/"
+    "derivatives:{sub}:{sub}_SUV_z.nii.gz"
+)
+
+#: The SPM MNI152 1mm grid these maps sit on.
+_SPM_MNI_SHAPE = (181, 217, 181)
+_SPM_MNI_AFFINE = [
+    [-1.0, 0.0, 0.0, 90.0],
+    [0.0, 1.0, 0.0, -126.0],
+    [0.0, 0.0, 1.0, -72.0],
+    [0.0, 0.0, 0.0, 1.0],
+]
+
+PET_SUBJECTS = [f"sub-control{i:02d}" for i in range(1, 43)]
+
+
+def _pet_cache_dir() -> Path:
+    from .atlas import cache_dir
+
+    path = cache_dir() / "openneuro-ds004054"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _repair_spm_origin(path: Path, out: Path) -> str:
+    """Rewrite one ds004054 map onto the canonical SPM MNI affine.
+
+    These files ship on the SPM MNI 1mm grid — the shape is exactly (181, 217, 181)
+    and the z extent is already exactly MNI's (-72 to 108). But the x and y origins
+    are offset by precisely the field-of-view span (180mm and 216mm), which puts the
+    whole brain in the positive octant, and the header claims scanner space.
+
+    That is a diagnosable bug, not an ambiguity, and the evidence is checkable: with
+    the shipped affine **0%** of every atlas region lands inside the brain; with the
+    canonical affine, 44-60% does, the shortfall being the inferior clipping that
+    PET's limited axial field of view produces. So we write a repaired copy and say
+    loudly that we did. The original download is kept next to it.
+    """
+    import nibabel as nib
+    import numpy as np
+
+    img = nib.load(str(path))
+    if tuple(int(s) for s in img.shape[:3]) != _SPM_MNI_SHAPE:
+        raise ValueError(
+            f"{path.name} is {img.shape[:3]}, not the SPM MNI grid {_SPM_MNI_SHAPE}; "
+            "refusing to rewrite an affine we cannot identify."
+        )
+    affine = np.array(_SPM_MNI_AFFINE)
+    repaired = nib.Nifti1Image(np.asanyarray(img.dataobj), affine, img.header)
+    repaired.set_sform(affine, code=4)
+    repaired.set_qform(affine, code=4)
+    repaired.to_filename(str(out))
+    return (
+        "affine repaired: the download declares scanner space with x/y origins offset "
+        "by one field of view; rewritten onto the canonical SPM MNI 1mm affine"
+    )
+
+
+def pet_cohort(n_subjects: int = 8, repair: bool = True) -> dict:
+    """Fetch a real PET cohort — paired MRI/PET subjects, PET maps only.
+
+    Downloads individual files over HTTPS rather than the whole dataset, so eight
+    subjects costs about 32MB against the dataset's 500MB. Cached after the first run.
+
+    ``repair`` rewrites the broken origin (see :func:`_repair_spm_origin`). With it
+    off you get the files exactly as published, which neurochat will then correctly
+    refuse — useful if you want to see the raw problem rather than the fix.
+    """
+    import urllib.error
+    import urllib.request
+
+    cache = _pet_cache_dir()
+    wanted = PET_SUBJECTS[: max(1, min(int(n_subjects), len(PET_SUBJECTS)))]
+    paths: list[Path] = []
+    failed: list[str] = []
+
+    for sub in wanted:
+        raw = cache / f"{sub}_SUV_z_original.nii.gz"
+        final = cache / (f"{sub}_SUV_mni.nii.gz" if repair else f"{sub}_SUV_z.nii.gz")
+        if final.exists():
+            paths.append(final)
+            continue
+        url = PET_FILE_URL.format(ds=PET_DATASET, tag=PET_SNAPSHOT, sub=sub)
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": "neurochat"})
+            with urllib.request.urlopen(request, timeout=120) as response:
+                raw.write_bytes(response.read())
+            if repair:
+                _repair_spm_origin(raw, final)
+            else:
+                raw.rename(final)
+            paths.append(final)
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
+            failed.append(f"{sub} ({type(exc).__name__})")
+
+    if not paths:
+        raise RuntimeError(
+            f"Could not download any PET scans from OpenNeuro {PET_DATASET}. "
+            f"Needs network access the first time. Failures: {', '.join(failed[:3])}"
+        )
+
+    entries, unreadable = _entries_from_paths(paths)
+    notes = [
+        f"OpenNeuro {PET_DATASET} — {len(entries)} subjects, [18F]FDG SUV maps "
+        "(standardised uptake, z-scored). Real PET from real people.",
+        "Only the PET derivative is downloaded (~4MB/subject). Each subject also has a "
+        "T1 and a raw PET in the dataset, but those are in scanner space and would need "
+        "preprocessing first.",
+    ]
+    if repair:
+        # Stated on every call, not only when a download happened. A cached run that
+        # quietly stops mentioning the rewrite is the same silent modification the
+        # rest of this project refuses to do.
+        notes.append(
+            "Affine repaired: these files ship declaring scanner space with x/y origins "
+            "offset by one field of view, which puts every atlas region 0% inside the "
+            "brain. Rewritten onto the canonical SPM MNI 1mm affine. The untouched "
+            "downloads are kept alongside as *_original.nii.gz."
+        )
+    if failed:
+        notes.append(f"{len(failed)} subject(s) failed to download: {', '.join(failed[:3])}")
+    if unreadable:
+        notes.append(f"{len(unreadable)} file(s) unreadable: {', '.join(unreadable[:3])}")
+    notes.append(
+        "Background is NaN, not zero, so roi_stats will report large NaN exclusions "
+        "outside the scanner's field of view. That is the data, not a bug."
+    )
+
+    return {
+        "root": str(cache),
+        "recursive": False,
+        "n_found": len(entries),
+        "entries": [e.to_dict() for e in entries],
+        "notes": notes,
+    }
+
+
 def scan_directory(directory: str | Path, recursive: bool = True) -> dict:
     """Find NIfTI files under ``directory``, reading headers only.
 

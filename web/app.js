@@ -652,8 +652,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   $("lib-sample").addEventListener("click", async () => {
-    $("lib-status").textContent = "Fetching OASIS cohort (first run downloads, then cached)…";
+    $("lib-status").textContent = "Fetching OASIS MRI cohort (first run downloads, then cached)…";
     applyLibrary(await post("/api/library/sample_cohort", { n_subjects: 12 }));
+  });
+
+  $("lib-pet").addEventListener("click", async () => {
+    $("lib-status").textContent = "Fetching PET cohort from OpenNeuro (~4MB per subject)…";
+    applyLibrary(await post("/api/library/pet_cohort", { n_subjects: 8 }));
   });
 
   $("lib-table").addEventListener("click", runRegionTable);
