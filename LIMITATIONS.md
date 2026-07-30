@@ -107,15 +107,14 @@ mechanics genuinely do not depend on what the numbers represent.
 
 **The interpretation does, and neurochat does not help you with it.**
 
-- **Units are reported when declared, and their absence is stated when not.** A BIDS
-  sidecar's `Units` field is read on load and repeated with every statistic; when
-  nothing declares them, `roi_stats` says so rather than letting a bare float pass for
-  a measurement. It cannot invent units that were never recorded, which is the common
-  case. Historically this section said no units were reported at all — that is now
-  fixed, but the underlying problem stands: a returned `mean` is still a bare number. An MRI intensity is in
+- **Units are reported when declared — but usually nothing declares them.** A BIDS
+  sidecar's `Units` field is read on load and repeated with every statistic, and when
+  nothing declares them `roi_stats` says so outright instead of letting a bare float
+  pass for a measurement. What it cannot do is invent units that were never recorded,
+  and that is the common case. So the underlying hazard stands: an MRI intensity is in
   arbitrary units, is not comparable between scanners, and is frequently not comparable
-  between two sessions on the same scanner. A PET SUV is genuinely quantitative. neurochat
-  reports both identically and cannot tell you which one you are holding.
+  between two sessions on the same scanner, while a PET SUV is genuinely quantitative —
+  and if neither file says which it is, neurochat cannot tell you either.
 - **No reference-region normalisation.** Standard PET quantification divides by a
   reference region (usually cerebellum) to produce an SUVR, because raw uptake is
   confounded by injected dose, body weight and scan timing. `compare_volumes(method=
