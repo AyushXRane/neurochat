@@ -85,6 +85,54 @@ def volume_data(img) -> np.ndarray:
     return data
 
 
+def thickness_mm(mask: np.ndarray, zooms) -> float:
+    """How thick the region actually is, in millimetres.
+
+    This, not voxel size, is what decides partial-volume contamination — a file's voxel
+    size is not its resolution. PET is routinely written on a 1mm grid while its true
+    effective resolution is 4-6mm, so any voxel-count measure reports that everything is
+    fine when it is not.
+
+    Measured as the diameter of the largest sphere that fits inside the region, via a
+    distance transform. The obvious alternative — the smallest side of the bounding box
+    — is wrong for curved structures: hippocampus is about 10mm thick but banana-shaped,
+    so its bounding box is chunky in every direction and it looks comfortably large when
+    it is nothing of the sort. The inscribed sphere does not care about curvature.
+    """
+    from scipy import ndimage
+
+    if not mask.any():
+        return 0.0
+    # Crop to the bounding box first; the transform is over the whole array otherwise.
+    idx = np.argwhere(mask)
+    lo, hi = idx.min(axis=0), idx.max(axis=0) + 1
+    local = mask[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]]
+    padded = np.pad(local, 1)  # so the region's own edge counts as outside
+    distance = ndimage.distance_transform_edt(padded, sampling=np.abs(np.asarray(zooms[:3], float)))
+    return round(float(distance.max()) * 2.0, 2)
+
+
+def boundary_fraction(mask: np.ndarray) -> float:
+    """What fraction of a mask's voxels touch its edge.
+
+    This is the cheap, honest proxy for partial-volume contamination. A region that
+    is large relative to the voxels is mostly interior, and its mean is mostly the
+    thing you asked for. A region only a few voxels across is nearly all edge — and
+    since every imaging modality blurs across boundaries, most of what you measure
+    there is actually the tissue next door. PET is the bad case: at 4-6mm resolution
+    a structure like the hippocampus is a handful of voxels wide.
+
+    Returns 0.0 for a solid interior, approaching 1.0 for a region that is all edge.
+    """
+    from scipy import ndimage
+
+    total = int(mask.sum())
+    if total == 0:
+        return 0.0
+    interior = ndimage.binary_erosion(mask, structure=ndimage.generate_binary_structure(3, 1))
+    return round(1.0 - float(interior.sum()) / total, 4)
+
+
 def summarize_roi(img, mask: np.ndarray, exclude_zeros: bool = False) -> dict:
     """Descriptive statistics inside a mask, with every exclusion counted.
 
@@ -125,6 +173,10 @@ def summarize_roi(img, mask: np.ndarray, exclude_zeros: bool = False) -> dict:
         "n_voxels_in_mask": n_in_mask,
         "n_voxels_used": n_used,
         **stats,
+        # How much of this region is edge, and how narrow it physically is. Together
+        # these say how much of the mean above is really the tissue next door.
+        "boundary_fraction": boundary_fraction(mask),
+        "thickness_mm": thickness_mm(mask, img.header.get_zooms()),
         "exclusions": {
             "nan": n_nan,
             "non_finite": n_inf,

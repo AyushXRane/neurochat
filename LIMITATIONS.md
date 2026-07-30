@@ -107,7 +107,12 @@ mechanics genuinely do not depend on what the numbers represent.
 
 **The interpretation does, and neurochat does not help you with it.**
 
-- **No units, anywhere.** A returned `mean` is a bare number. An MRI intensity is in
+- **Units are reported when declared, and their absence is stated when not.** A BIDS
+  sidecar's `Units` field is read on load and repeated with every statistic; when
+  nothing declares them, `roi_stats` says so rather than letting a bare float pass for
+  a measurement. It cannot invent units that were never recorded, which is the common
+  case. Historically this section said no units were reported at all — that is now
+  fixed, but the underlying problem stands: a returned `mean` is still a bare number. An MRI intensity is in
   arbitrary units, is not comparable between scanners, and is frequently not comparable
   between two sessions on the same scanner. A PET SUV is genuinely quantitative. neurochat
   reports both identically and cannot tell you which one you are holding.
@@ -116,12 +121,15 @@ mechanics genuinely do not depend on what the numbers represent.
   confounded by injected dose, body weight and scan timing. `compare_volumes(method=
   "ratio")` can approximate this if you supply the reference volume yourself, but nothing
   prompts you to, and nothing checks that you did.
-- **No partial-volume correction, and no warning about it.** PET resolution is roughly
-  4–6mm against MRI's ~1mm, so a small structure measured in PET is substantially
-  contaminated by neighbouring tissue — a hippocampal value that is partly ventricle and
-  partly white matter. Correcting for this is a whole literature. neurochat does none of
-  it and does not currently flag when your voxels are large relative to the region you
-  asked about.
+- **No partial-volume correction — but you are now warned.** PET resolution is roughly
+  4–6mm against MRI's ~1mm, so a thin structure measured in PET is substantially
+  contaminated by neighbouring tissue: a hippocampal value that is partly ventricle and
+  partly white matter. `roi_stats` reports each region's actual thickness and the
+  fraction of its voxels on the boundary, and warns when the structure is thin enough
+  for this to matter. Thickness is measured as the largest inscribed sphere rather than
+  the bounding box, because hippocampus is thin *and* curved and a bounding box calls it
+  chunky. **The warning does not correct anything** — real partial-volume correction
+  needs the subject's MRI tissue segmentation and is a separate algorithm.
 
 The practical consequence: neurochat gives you a correct mean of the correct voxels, and
 says nothing about whether that mean means anything in your modality. Treat it as a

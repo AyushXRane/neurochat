@@ -627,6 +627,40 @@ def roi_stats(
             f"{stats['exclusions']['nan']} of {stats['n_voxels_in_mask']} voxels in this "
             "region are NaN and were excluded from every statistic below."
         )
+
+    # What the number means. A bare float looks equally authoritative whether it is a
+    # quantitative PET SUV or an arbitrary MRI intensity that will not survive a change
+    # of scanner, so say which — including saying that nobody recorded it.
+    if target.units:
+        notes.append(f"Values are in {target.units}.")
+    else:
+        notes.append(
+            "No units are recorded for this volume, so these numbers carry no declared "
+            "scale. MRI intensities in particular are arbitrary and are usually not "
+            "comparable across scanners or sessions."
+        )
+
+    # How much to trust the number. Partial-volume contamination is invisible in the
+    # output and worst exactly where people care most: small structures at PET
+    # resolution.
+    edge = stats.get("boundary_fraction") or 0.0
+    narrow = stats.get("thickness_mm") or 0.0
+    # 18mm is roughly three PET resolution elements. Below that, blur from neighbouring
+    # tissue is a material part of the value. Judged on physical width rather than voxel
+    # count, because PET is often stored on a finer grid than it was ever resolved at.
+    if narrow and narrow < 18.0:
+        notes.append(
+            f"This region is only {narrow:.0f}mm thick, and {edge:.0%} of "
+            "its voxels are on the boundary. If this is PET (4-6mm effective resolution, "
+            "whatever the voxel size says) a material part of this value is signal blurred "
+            "in from surrounding tissue. No partial-volume correction is applied."
+        )
+    elif edge >= 0.6:
+        notes.append(
+            f"{edge:.0%} of this region's voxels are on its boundary, so a substantial part "
+            "of this value comes from the edge, where signal blurs across from neighbouring "
+            "tissue. No partial-volume correction is applied."
+        )
     if stats["exclusions"]["n_zero_in_mask"] and not exclude_zeros:
         notes.append(
             f"{stats['exclusions']['n_zero_in_mask']} voxels are exactly zero and were "

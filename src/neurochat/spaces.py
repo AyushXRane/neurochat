@@ -204,11 +204,57 @@ def _geometry_hints(img) -> tuple[str | None, str | None]:
     return None, None
 
 
-def _sidecar_space(path: Path) -> tuple[str | None, str]:
-    """Read a BIDS JSON sidecar sitting next to the image, if there is one."""
+def read_sidecar(path: str | Path) -> dict:
+    """The BIDS JSON sidecar sitting next to an image, or ``{}``.
+
+    A NIfTI header records voxel size and orientation but has nowhere to say what the
+    numbers *mean*. That lives in the sidecar, when there is one.
+    """
+    path = Path(path)
     for candidate in (
         path.with_suffix("").with_suffix(".json"),  # foo.nii.gz -> foo.json
         path.with_suffix(".json"),  # foo.nii -> foo.json
+    ):
+        if not candidate.exists():
+            continue
+        try:
+            meta = json.loads(candidate.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        if isinstance(meta, dict):
+            return meta
+    return {}
+
+
+def read_units(path: str | Path) -> tuple[str | None, str | None]:
+    """Return (units, modality) declared for this image, either may be ``None``.
+
+    Units matter more than they look. A PET SUV is quantitative and comparable across
+    people; an MRI intensity is arbitrary and often not comparable between two sessions
+    on the same scanner. Both come out of ``roi_stats`` as a bare float, so unless the
+    units travel with the number, there is no way to tell which one you are holding.
+    """
+    meta = read_sidecar(path)
+    units = None
+    for key in ("Units", "units", "Unit"):
+        value = meta.get(key)
+        if isinstance(value, str) and value.strip():
+            units = value.strip()
+            break
+    modality = None
+    for key in ("Modality", "modality", "ImageType"):
+        value = meta.get(key)
+        if isinstance(value, str) and value.strip():
+            modality = value.strip()
+            break
+    return units, modality
+
+
+def _sidecar_space(path: Path) -> tuple[str | None, str]:
+    """Find the template space declared in a BIDS JSON sidecar, if there is one."""
+    for candidate in (
+        path.with_suffix("").with_suffix(".json"),
+        path.with_suffix(".json"),
     ):
         if not candidate.exists():
             continue

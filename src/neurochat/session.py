@@ -17,7 +17,7 @@ from pathlib import Path
 from .atlas import AtlasTable
 from .errors import VolumeNotFoundError
 from .script import ScriptAccumulator
-from .spaces import SpaceInfo, affine_summary, detect_space
+from .spaces import SpaceInfo, affine_summary, detect_space, read_units
 from .viewer import ViewerBridge
 
 MAX_TRACES = 50
@@ -53,6 +53,10 @@ class LoadedVolume:
     dtype: str
     affine: dict
     summary: dict
+    #: What the numbers mean, from the BIDS sidecar. ``None`` when nothing declared
+    #: them — which is the common case, and worth saying rather than glossing over.
+    units: str | None = None
+    modality: str | None = None
     loaded_at: str = field(
         default_factory=lambda: _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
     )
@@ -71,6 +75,8 @@ class LoadedVolume:
             "dtype": self.dtype,
             "affine": self.affine,
             "space": self.space.to_dict(),
+            "units": self.units,
+            "modality": self.modality,
             "values": self.summary,
         }
 
@@ -143,6 +149,7 @@ class Session:
             dtype=str(img.get_data_dtype()),
             affine=affine_summary(img.affine),
             summary=kernel.summarize_volume(img),
+            **dict(zip(("units", "modality"), read_units(path))),
         )
         self.volumes[name] = volume
         self.last_volume = name
