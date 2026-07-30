@@ -14,6 +14,12 @@ Harvard-Oxford atlas rather than from anyone's memory of where it is.*
 
 ---
 
+**New here?** [QUICKSTART.md](QUICKSTART.md) gets you from install to your first
+measurement in five minutes, assuming no neuroimaging background.
+[GLOSSARY.md](GLOSSARY.md) explains every term.
+
+---
+
 ## Install
 
 ```bash
